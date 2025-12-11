@@ -61,6 +61,13 @@ func copyBinaryToConfigDir() (string, error) {
 }
 
 func installService(_ *Config) error {
+	// Stop existing service if running
+	if isServiceInstalled() {
+		fmt.Println("Stopping existing service...")
+		exec.Command("schtasks", "/End", "/TN", taskName).Run()
+		exec.Command("schtasks", "/Delete", "/TN", taskName, "/F").Run()
+	}
+
 	// Copy binary to config directory
 	installedPath, err := copyBinaryToConfigDir()
 	if err != nil {
@@ -68,13 +75,7 @@ func installService(_ *Config) error {
 	}
 	fmt.Printf("Binary copied to: %s\n", installedPath)
 
-	// First, delete existing task if any
-	exec.Command("schtasks", "/Delete", "/TN", taskName, "/F").Run()
-
 	// Create scheduled task that runs at logon
-	// Using schtasks command to create a task that:
-	// - Runs at user logon
-	// - Runs the monitor in background
 	cmd := exec.Command("schtasks", "/Create",
 		"/TN", taskName,
 		"/TR", fmt.Sprintf(`"%s" run`, installedPath),
@@ -88,9 +89,10 @@ func installService(_ *Config) error {
 		return fmt.Errorf("failed to create scheduled task: %s - %w", string(output), err)
 	}
 
-	// Also start the task immediately
+	// Start the service
+	fmt.Println("Starting service...")
 	startCmd := exec.Command("schtasks", "/Run", "/TN", taskName)
-	startCmd.Run() // Ignore errors for immediate start
+	startCmd.Run()
 
 	return nil
 }

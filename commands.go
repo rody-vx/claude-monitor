@@ -94,17 +94,26 @@ func handleRun() {
 		os.Exit(1)
 	}
 
-	// Setup logging (both file and stdout)
-	logFile, err := os.OpenFile(getLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Setup logging
+	// Check if running in a terminal (foreground) or as a background service
+	// When running as launchd service, stdin is not a terminal and stdout is redirected to log file
 	var logger *log.Logger
-	if err != nil {
-		fmt.Printf("Warning: Could not open log file: %v\n", err)
-		logger = log.New(os.Stdout, "", log.LstdFlags)
+	isTerminal := isatty(os.Stdin.Fd())
+
+	if isTerminal {
+		// Foreground run: write to both stdout (for terminal) and log file
+		logFile, err := os.OpenFile(getLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			fmt.Printf("Warning: Could not open log file: %v\n", err)
+			logger = log.New(os.Stdout, "", log.LstdFlags)
+		} else {
+			defer logFile.Close()
+			multiWriter := io.MultiWriter(os.Stdout, logFile)
+			logger = log.New(multiWriter, "", log.LstdFlags)
+		}
 	} else {
-		defer logFile.Close()
-		// Write to both stdout and file
-		multiWriter := io.MultiWriter(os.Stdout, logFile)
-		logger = log.New(multiWriter, "", log.LstdFlags)
+		// Background service: stdout goes to log file via plist redirect
+		logger = log.New(os.Stdout, "", log.LstdFlags)
 	}
 
 	logger.Printf("Claude Monitor started")

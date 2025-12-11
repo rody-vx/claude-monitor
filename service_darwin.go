@@ -62,6 +62,14 @@ func copyBinaryToConfigDir() (string, error) {
 }
 
 func installService(_ *Config) error {
+	plistPath := getLaunchAgentPath()
+
+	// Stop existing service if running
+	if isServiceInstalled() {
+		fmt.Println("Stopping existing service...")
+		exec.Command("launchctl", "unload", plistPath).Run()
+	}
+
 	// Copy binary to config directory
 	installedPath, err := copyBinaryToConfigDir()
 	if err != nil {
@@ -70,7 +78,7 @@ func installService(_ *Config) error {
 	fmt.Printf("Binary copied to: %s\n", installedPath)
 
 	// Create LaunchAgents directory if not exists
-	launchAgentsDir := filepath.Dir(getLaunchAgentPath())
+	launchAgentsDir := filepath.Dir(plistPath)
 	if err := os.MkdirAll(launchAgentsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create LaunchAgents directory: %w", err)
 	}
@@ -104,15 +112,12 @@ func installService(_ *Config) error {
 </plist>`, launchAgentLabel, installedPath, getLogPath(), getLogPath())
 
 	// Write plist file
-	plistPath := getLaunchAgentPath()
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
 		return fmt.Errorf("failed to write plist: %w", err)
 	}
 
-	// Unload if already loaded (ignore errors)
-	exec.Command("launchctl", "unload", plistPath).Run()
-
-	// Load the new plist
+	// Load and start the service
+	fmt.Println("Starting service...")
 	cmd := exec.Command("launchctl", "load", plistPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to load LaunchAgent: %s - %w", string(output), err)
