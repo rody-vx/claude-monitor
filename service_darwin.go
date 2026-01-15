@@ -165,16 +165,29 @@ func getServiceStatus() string {
 		return "Not installed or not running"
 	}
 
-	lines := strings.Split(string(output), "\n")
-	if len(lines) > 0 {
-		parts := strings.Fields(lines[0])
-		if len(parts) >= 2 {
-			pid := parts[0]
-			if pid != "-" {
+	// launchctl list <label> returns a dict format like:
+	// {
+	//     "PID" = 12345;
+	//     "Label" = "com.claude.monitor";
+	//     ...
+	// };
+	outputStr := string(output)
+
+	// Look for PID in the output
+	for _, line := range strings.Split(outputStr, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "\"PID\"") {
+			// Extract PID value: "PID" = 12345;
+			parts := strings.Split(line, "=")
+			if len(parts) >= 2 {
+				pid := strings.TrimSpace(parts[1])
+				pid = strings.TrimSuffix(pid, ";")
+				pid = strings.TrimSpace(pid)
 				return fmt.Sprintf("Running (PID: %s)", pid)
 			}
 		}
 	}
+
 	return "Installed but not running"
 }
 
