@@ -1,6 +1,13 @@
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,go,macos,windows
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,go,macos,windows
 
+### JetBrains IDE ###
+.idea/
+
+### Build binary ###
+claude-monitor
+claude-monitor-test
+
 ### Go ###
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore

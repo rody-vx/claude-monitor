@@ -11,8 +11,8 @@ import (
 
 // Claude JSONL entry structures
 type ClaudeEntry struct {
-	Type      string       `json:"type"`
-	Timestamp string       `json:"timestamp"`
+	Type      string        `json:"type"`
+	Timestamp string        `json:"timestamp"`
 	Message   ClaudeMessage `json:"message"`
 }
 
@@ -44,6 +44,12 @@ type UsageData struct {
 	Daily []DailyStats `json:"daily"`
 }
 
+// MessageDataEntry stores the last usage data for a message ID
+type MessageDataEntry struct {
+	DateStr string
+	Usage   *ClaudeUsage
+}
+
 func collectUsageData() (*UsageData, error) {
 	claudeDir := getClaudeProjectsDir()
 
@@ -52,14 +58,12 @@ func collectUsageData() (*UsageData, error) {
 		return &UsageData{Daily: []DailyStats{}}, nil
 	}
 
-	// Track seen messages to prevent duplicates
-	seenMessages := make(map[string]bool)
+	// Phase 1: Store last usage per message ID (streaming creates multiple entries, last one has final values)
+	// This matches the Python script logic: "Always overwrite - last entry has the final usage values"
+	messageData := make(map[string]*MessageDataEntry)
 
 	// Cutoff time (90 days)
 	cutoffTime := time.Now().UTC().AddDate(0, 0, -90)
-
-	// Group by date
-	dailyStatsMap := make(map[string]*DailyStats)
 
 	// Find all JSONL files
 	err := filepath.Walk(claudeDir, func(path string, info os.FileInfo, err error) error {
@@ -71,12 +75,29 @@ func collectUsageData() (*UsageData, error) {
 			return nil
 		}
 
-		processJSONLFile(path, seenMessages, dailyStatsMap, cutoffTime)
+		processJSONLFile(path, messageData, cutoffTime)
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Phase 2: Aggregate by date using the last usage values
+	dailyStatsMap := make(map[string]*DailyStats)
+	for _, data := range messageData {
+		dateStr := data.DateStr
+		usage := data.Usage
+
+		if dailyStatsMap[dateStr] == nil {
+			dailyStatsMap[dateStr] = &DailyStats{Date: dateStr}
+		}
+
+		dailyStatsMap[dateStr].TotalInputTokens += int64(usage.InputTokens)
+		dailyStatsMap[dateStr].TotalOutputTokens += int64(usage.OutputTokens)
+		dailyStatsMap[dateStr].TotalCacheWriteTokens += int64(usage.CacheCreationInputTokens)
+		dailyStatsMap[dateStr].TotalCacheReadTokens += int64(usage.CacheReadInputTokens)
+		dailyStatsMap[dateStr].RequestCount++
 	}
 
 	// Convert map to sorted slice
@@ -94,7 +115,7 @@ func collectUsageData() (*UsageData, error) {
 	return &UsageData{Daily: dailyList}, nil
 }
 
-func processJSONLFile(path string, seenMessages map[string]bool, dailyStats map[string]*DailyStats, cutoffTime time.Time) {
+func processJSONLFile(path string, messageData map[string]*MessageDataEntry, cutoffTime time.Time) {
 	file, err := os.Open(path)
 	if err != nil {
 		return
@@ -147,25 +168,19 @@ func processJSONLFile(path string, seenMessages map[string]bool, dailyStats map[
 			continue
 		}
 
-		// Check for duplicates
+		// Use message ID as key, or generate one from timestamp if missing
+		// This matches Python: key = msg_id if msg_id else f"no_id_{timestamp_str}"
 		msgID := entry.Message.ID
-		if msgID != "" {
-			if seenMessages[msgID] {
-				continue
-			}
-			seenMessages[msgID] = true
+		key := msgID
+		if key == "" {
+			key = "no_id_" + entry.Timestamp
 		}
 
-		// Initialize date if not exists
-		if dailyStats[dateStr] == nil {
-			dailyStats[dateStr] = &DailyStats{Date: dateStr}
+		// Always overwrite - last entry has the final usage values
+		// This matches Python: "Always overwrite - last entry has the final usage values"
+		messageData[key] = &MessageDataEntry{
+			DateStr: dateStr,
+			Usage:   usage,
 		}
-
-		// Aggregate usage
-		dailyStats[dateStr].TotalInputTokens += int64(usage.InputTokens)
-		dailyStats[dateStr].TotalOutputTokens += int64(usage.OutputTokens)
-		dailyStats[dateStr].TotalCacheWriteTokens += int64(usage.CacheCreationInputTokens)
-		dailyStats[dateStr].TotalCacheReadTokens += int64(usage.CacheReadInputTokens)
-		dailyStats[dateStr].RequestCount++
 	}
 }
