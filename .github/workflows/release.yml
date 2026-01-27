@@ -1,0 +1,42 @@
+name: Build and Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Build all platforms
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          mkdir -p dist
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/claude-monitor-darwin-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/claude-monitor-darwin-amd64 .
+          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/claude-monitor-windows-amd64.exe .
+          GOOS=windows GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/claude-monitor-windows-arm64.exe .
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/claude-monitor-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/claude-monitor-linux-arm64 .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/claude-monitor-darwin-arm64
+            dist/claude-monitor-darwin-amd64
+            dist/claude-monitor-windows-amd64.exe
+            dist/claude-monitor-windows-arm64.exe
+            dist/claude-monitor-linux-amd64
+            dist/claude-monitor-linux-arm64
