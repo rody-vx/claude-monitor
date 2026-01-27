@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const taskName = "ClaudeMonitor"
@@ -60,12 +61,53 @@ func copyBinaryToConfigDir() (string, error) {
 	return dstPath, nil
 }
 
+func getBatchFilePath() string {
+	return filepath.Join(getConfigDir(), "claude-monitor.bat")
+}
+
+func getVbsFilePath() string {
+	return filepath.Join(getConfigDir(), "claude-monitor.vbs")
+}
+
+func createLauncherFiles(exePath string) error {
+	// Create batch file that runs the exe with "run" argument
+	batContent := fmt.Sprintf("@echo off\r\n\"%s\" run\r\n", exePath)
+	if err := os.WriteFile(getBatchFilePath(), []byte(batContent), 0755); err != nil {
+		return fmt.Errorf("failed to create batch file: %w", err)
+	}
+
+	// Create VBScript that launches the batch file with hidden window
+	vbsContent := fmt.Sprintf("CreateObject(\"Wscript.Shell\").Run \"\"\"%s\"\"\", 0, False\r\n", getBatchFilePath())
+	if err := os.WriteFile(getVbsFilePath(), []byte(vbsContent), 0755); err != nil {
+		return fmt.Errorf("failed to create vbs file: %w", err)
+	}
+
+	return nil
+}
+
 func installService(_ *Config) error {
-	// Stop existing service if running
+	// Stop existing service and kill all related processes
 	if isServiceInstalled() {
 		fmt.Println("Stopping existing service...")
 		exec.Command("schtasks", "/End", "/TN", taskName).Run()
 		exec.Command("schtasks", "/Delete", "/TN", taskName, "/F").Run()
+	}
+	// Kill the monitor process and any wscript/cmd hosting it
+	exec.Command("taskkill", "/IM", "claude-monitor.exe", "/F").Run()
+	// Kill wscript running our vbs launcher
+	exec.Command("cmd", "/C", fmt.Sprintf(
+		`wmic process where "name='wscript.exe' and commandline like '%%%s%%'" call terminate`,
+		"claude-monitor.vbs",
+	)).Run()
+	// Wait for file to be released
+	installedBin := getInstalledBinaryPathWindows()
+	for i := 0; i < 20; i++ {
+		f, err := os.OpenFile(installedBin, os.O_RDWR, 0755)
+		if err == nil {
+			f.Close()
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	// Copy binary to config directory
@@ -75,10 +117,16 @@ func installService(_ *Config) error {
 	}
 	fmt.Printf("Binary copied to: %s\n", installedPath)
 
-	// Create scheduled task that runs at logon
+	// Create launcher files (bat + vbs for hidden window)
+	if err := createLauncherFiles(installedPath); err != nil {
+		return fmt.Errorf("failed to create launcher files: %w", err)
+	}
+	fmt.Printf("Launcher created: %s\n", getVbsFilePath())
+
+	// Create scheduled task that runs the VBScript (hidden window)
 	cmd := exec.Command("schtasks", "/Create",
 		"/TN", taskName,
-		"/TR", fmt.Sprintf(`"%s" run`, installedPath),
+		"/TR", fmt.Sprintf(`wscript.exe "%s"`, getVbsFilePath()),
 		"/SC", "ONLOGON",
 		"/RL", "LIMITED",
 		"/F",
