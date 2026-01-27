@@ -5,6 +5,8 @@ import (
 	"os"
 )
 
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -25,7 +27,7 @@ func main() {
 	case "test":
 		handleTest()
 	case "version":
-		fmt.Println("claude-monitor v1.0.0")
+		fmt.Printf("claude-monitor %s\n", version)
 	case "help", "-h", "--help":
 		printUsage()
 	default:
