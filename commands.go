@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -180,7 +181,7 @@ func handleTest() {
 	}
 
 	// Save to file
-	outputFile := "/tmp/claude-usage-go.json"
+	outputFile := filepath.Join(os.TempDir(), "claude-usage-go.json")
 	jsonData, err := json.MarshalIndent(usageData, "", "  ")
 	if err != nil {
 		fmt.Printf("Error marshaling JSON: %v\n", err)
