@@ -122,13 +122,14 @@ func processJSONLFile(path string, messageData map[string]*MessageDataEntry, cut
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	// Increase buffer size for large lines
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
+	// Lines must be read whole regardless of size: a line with attachments can be multiple MB
+	reader := bufio.NewReader(file)
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
+	for {
+		line, readErr := reader.ReadBytes('\n')
+		if len(line) == 0 && readErr != nil {
+			break
+		}
 
 		var entry ClaudeEntry
 		if err := json.Unmarshal(line, &entry); err != nil {
