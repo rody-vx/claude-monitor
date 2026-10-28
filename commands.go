@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -136,6 +137,19 @@ func handleRun() {
 		logger.Printf("Initial upload: %s", result.Message)
 	}
 
+	// Auto update only for the service binary, not for a manual run of a downloaded binary
+	var updateTick <-chan time.Time
+	if !config.DisableAutoUpdate && isRunningInstalledBinary() {
+		if _, ok := parseVersion(version); ok {
+			cleanupUpdateBinary()
+			tryAutoUpdate(logger)
+
+			updateTicker := time.NewTicker(updateCheckInterval)
+			defer updateTicker.Stop()
+			updateTick = updateTicker.C
+		}
+	}
+
 	// Start periodic upload loop
 	ticker := time.NewTicker(time.Duration(config.IntervalSeconds) * time.Second)
 	defer ticker.Stop()
@@ -154,6 +168,9 @@ func handleRun() {
 				logger.Printf("Upload #%d: %s", uploadCount, result.Message)
 			}
 
+		case <-updateTick:
+			tryAutoUpdate(logger)
+
 		case sig := <-sigChan:
 			logger.Printf("Received signal: %v", sig)
 			logger.Println("Performing final upload...")
@@ -166,6 +183,42 @@ func handleRun() {
 			logger.Printf("Claude Monitor stopped (total uploads: %d)", uploadCount)
 			return
 		}
+	}
+}
+
+// handleUpdate downloads the latest release and installs it
+func handleUpdate() {
+	if _, ok := parseVersion(version); !ok {
+		fmt.Printf("Update is not supported for %s build\n", version)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Current version: %s\n", version)
+	tag, newer, err := checkForUpdate()
+	if err != nil {
+		fmt.Printf("Error checking for update: %v\n", err)
+		os.Exit(1)
+	}
+	if !newer {
+		fmt.Printf("Already up to date (latest: %s)\n", tag)
+		return
+	}
+
+	fmt.Printf("Downloading %s...\n", tag)
+	updatePath, err := downloadUpdate(tag)
+	if err != nil {
+		fmt.Printf("Error downloading update: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Install with the new binary, which also replaces the installed binary and restarts the service
+	cmd := exec.Command(updatePath, "install")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Error installing update: %v\n", err)
+		os.Exit(1)
 	}
 }
 

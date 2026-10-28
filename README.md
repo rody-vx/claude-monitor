@@ -75,6 +75,16 @@ bash build.sh
 ./claude-monitor run
 ```
 
+### 업데이트
+
+설치된 서비스는 시작할 때와 1시간마다 GitHub 최신 릴리즈를 확인해 새 버전이 있으면 자동으로 업데이트합니다.
+릴리즈의 `checksums.txt` 로 검증한 뒤 새 바이너리로 `install` 을 실행해 서비스를 재시작합니다.
+
+```bash
+# 수동 업데이트
+./claude-monitor update
+```
+
 ### 테스트 (업로드 없이 데이터 수집만)
 
 ```bash
@@ -98,6 +108,7 @@ bash build.sh
 | `email` | (필수) | 사용자 이메일 |
 | `serverUrl` | `http://10.12.200.99:3498` | 업로드 서버 URL |
 | `intervalSeconds` | `600` (10분) | 업로드 주기 (초) |
+| `disableAutoUpdate` | `false` | `true` 면 자동 업데이트 끔 |
 
 ## 파일 위치
 

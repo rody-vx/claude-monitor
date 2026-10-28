@@ -9,10 +9,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
 const taskName = "ClaudeMonitor"
+
+const (
+	createBreakawayFromJob = 0x01000000
+	createNoWindow         = 0x08000000
+)
 
 func getExecutablePath() (string, error) {
 	execPath, err := os.Executable()
@@ -94,9 +100,9 @@ func installService(_ *Config) error {
 	}
 	// Kill the monitor process and any wscript/cmd hosting it
 	exec.Command("taskkill", "/IM", "claude-monitor.exe", "/F").Run()
-	// Kill wscript running our vbs launcher
-	exec.Command("cmd", "/C", fmt.Sprintf(
-		`wmic process where "name='wscript.exe' and commandline like '%%%s%%'" call terminate`,
+	// Kill wscript running our vbs launcher (wmic is not installed by default since Windows 11 24H2)
+	exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", fmt.Sprintf(
+		`Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'wscript.exe' -and $_.CommandLine -like '*%s*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`,
 		"claude-monitor.vbs",
 	)).Run()
 	// Wait for file to be released
@@ -194,4 +200,33 @@ func isServiceInstalled() bool {
 	cmd := exec.Command("schtasks", "/Query", "/TN", taskName)
 	err := cmd.Run()
 	return err == nil
+}
+
+// startDetachedInstaller runs "<path> install" outside of this service process
+func startDetachedInstaller(path string) error {
+	logFile, err := os.OpenFile(getLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer logFile.Close()
+
+	start := func(flags uint32) error {
+		cmd := exec.Command(path, "install")
+		cmd.Stdout = logFile
+		cmd.Stderr = logFile
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: flags}
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		return cmd.Process.Release()
+	}
+
+	// No window for the installer and its child commands (schtasks, taskkill, powershell)
+	flags := uint32(syscall.CREATE_NEW_PROCESS_GROUP | createNoWindow)
+	// Break away from the task scheduler job so stopping the task does not kill the installer.
+	// Fall back to a normal start if the job does not allow breakaway.
+	if err := start(flags | createBreakawayFromJob); err == nil {
+		return nil
+	}
+	return start(flags)
 }

@@ -13,6 +13,7 @@ type Config struct {
 	Email          string `json:"email"`
 	ServerURL      string `json:"serverUrl"`
 	IntervalSeconds int    `json:"intervalSeconds"`
+	DisableAutoUpdate bool `json:"disableAutoUpdate,omitempty"`
 }
 
 func getConfigDir() string {

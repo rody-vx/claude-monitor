@@ -26,6 +26,8 @@ func main() {
 		handleRun()
 	case "test":
 		handleTest()
+	case "update":
+		handleUpdate()
 	case "version":
 		fmt.Printf("claude-monitor %s\n", version)
 	case "help", "-h", "--help":
@@ -48,6 +50,7 @@ Commands:
   uninstall   Remove background service
   status      Show service status and last upload info
   run         Run in foreground (manual mode)
+  update      Update to the latest release and restart the service
   version     Show version
   help        Show this help
 

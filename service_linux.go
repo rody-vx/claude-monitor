@@ -165,3 +165,17 @@ func isServiceInstalled() bool {
 	_, err := os.Stat(getSystemdServicePath())
 	return err == nil
 }
+
+// startDetachedInstaller runs "<path> install" outside of this service process.
+// systemctl stop kills every process in the service cgroup, so the installer runs as a transient unit.
+func startDetachedInstaller(path string) error {
+	logPath := getLogPath()
+	cmd := exec.Command("systemd-run", "--user", "--collect", "--quiet",
+		"-p", "StandardOutput=append:"+logPath,
+		"-p", "StandardError=append:"+logPath,
+		path, "install")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("systemd-run failed: %s - %w", strings.TrimSpace(string(output)), err)
+	}
+	return nil
+}

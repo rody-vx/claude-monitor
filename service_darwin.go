@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const launchAgentLabel = "com.claude.monitor"
@@ -45,6 +46,10 @@ func copyBinaryToConfigDir() (string, error) {
 		return "", fmt.Errorf("failed to open source binary: %w", err)
 	}
 	defer srcFile.Close()
+
+	// Remove existing binary first: overwriting a signed binary in place
+	// makes macOS kill it on launch due to the cached code signature
+	os.Remove(dstPath)
 
 	// Create destination file
 	dstFile, err := os.OpenFile(dstPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
@@ -195,4 +200,23 @@ func isServiceInstalled() bool {
 	plistPath := getLaunchAgentPath()
 	_, err := os.Stat(plistPath)
 	return err == nil
+}
+
+// startDetachedInstaller runs "<path> install" outside of this service process
+func startDetachedInstaller(path string) error {
+	logFile, err := os.OpenFile(getLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer logFile.Close()
+
+	cmd := exec.Command(path, "install")
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	// New session so launchctl unload does not kill the installer along with this process group
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
 }

@@ -29,6 +29,11 @@ jobs:
           GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/claude-monitor-linux-amd64 .
           GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/claude-monitor-linux-arm64 .
 
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum claude-monitor-* > checksums.txt
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -40,3 +45,4 @@ jobs:
             dist/claude-monitor-windows-arm64.exe
             dist/claude-monitor-linux-amd64
             dist/claude-monitor-linux-arm64
+            dist/checksums.txt
