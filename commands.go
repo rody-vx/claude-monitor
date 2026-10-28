@@ -96,6 +96,17 @@ func handleRun() {
 		os.Exit(1)
 	}
 
+	// Allow only one run at a time to avoid duplicate uploads and logs.
+	// The service waits for the previous process to exit (e.g. final upload during an update).
+	lockTimeout := time.Duration(0)
+	if isRunningInstalledBinary() {
+		lockTimeout = 30 * time.Second
+	}
+	if err := acquireRunLock(lockTimeout); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Setup logging
 	// Write to the log file directly (rotated daily) and to stdout.
 	// The service definitions no longer redirect stdout to the log file, so lines are not duplicated.
