@@ -97,25 +97,18 @@ func handleRun() {
 	}
 
 	// Setup logging
-	// Check if running in a terminal (foreground) or as a background service
-	// When running as launchd service, stdin is not a terminal and stdout is redirected to log file
+	// Write to the log file directly (rotated daily) and to stdout.
+	// The service definitions no longer redirect stdout to the log file, so lines are not duplicated.
 	var logger *log.Logger
-	isTerminal := isatty(os.Stdin.Fd())
-
-	if isTerminal {
-		// Foreground run: write to both stdout (for terminal) and log file
-		logFile, err := os.OpenFile(getLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			fmt.Printf("Warning: Could not open log file: %v\n", err)
-			logger = log.New(os.Stdout, "", log.LstdFlags)
-		} else {
-			defer logFile.Close()
-			multiWriter := io.MultiWriter(os.Stdout, logFile)
-			logger = log.New(multiWriter, "", log.LstdFlags)
-		}
-	} else {
-		// Background service: stdout goes to log file via plist redirect
+	logWriter, err := openDailyLog(getLogPath())
+	if err != nil {
+		fmt.Printf("Warning: Could not open log file: %v\n", err)
 		logger = log.New(os.Stdout, "", log.LstdFlags)
+	} else {
+		defer logWriter.Close()
+		// Log file first: MultiWriter stops at the first failing writer
+		multiWriter := io.MultiWriter(logWriter, os.Stdout)
+		logger = log.New(multiWriter, "", log.LstdFlags)
 	}
 
 	logger.Printf("Claude Monitor started")

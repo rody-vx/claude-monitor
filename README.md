@@ -115,7 +115,7 @@ bash build.sh
 | 파일 | 경로 |
 |------|------|
 | 설정 파일 | `~/.claude-monitor/config.json` |
-| 로그 파일 | `~/.claude-monitor/monitor.log` |
+| 로그 파일 | `~/.claude-monitor/monitor.log` (날짜가 바뀌면 `monitor.log.YYYYMMDD` 로 보관, 30일 후 삭제) |
 | LaunchAgent (macOS) | `~/Library/LaunchAgents/com.claude.monitor.plist` |
 
 ## 자동 시작

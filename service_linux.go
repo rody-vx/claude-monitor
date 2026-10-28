@@ -92,12 +92,10 @@ Type=simple
 ExecStart=%s run
 Restart=on-failure
 RestartSec=10
-StandardOutput=append:%s
-StandardError=append:%s
 
 [Install]
 WantedBy=default.target
-`, installedPath, getLogPath(), getLogPath())
+`, installedPath)
 
 	if err := os.WriteFile(getSystemdServicePath(), []byte(serviceContent), 0644); err != nil {
 		return fmt.Errorf("failed to write systemd service: %w", err)

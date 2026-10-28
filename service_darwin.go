@@ -104,17 +104,13 @@ func installService(_ *Config) error {
     <true/>
     <key>KeepAlive</key>
     <true/>
-    <key>StandardOutPath</key>
-    <string>%s</string>
-    <key>StandardErrorPath</key>
-    <string>%s</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
 </dict>
-</plist>`, launchAgentLabel, installedPath, getLogPath(), getLogPath())
+</plist>`, launchAgentLabel, installedPath)
 
 	// Write plist file
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
